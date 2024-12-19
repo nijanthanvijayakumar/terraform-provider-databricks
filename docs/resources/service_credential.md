@@ -1,0 +1,123 @@
+---
+subcategory: "Unity Catalog"
+---
+# databricks_service_credential Resource
+
+-> This resource can be used with an account or workspace-level provider.
+
+To work with service credentials, Unity Catalog introduces a new object to access and work with external cloud services:
+
+- `databricks_service_credential` represents authentication methods to access cloud services (e.g. an IAM role for Amazon S3 or a service principal/managed identity for Azure Storage). Service credentials are access-controlled to determine which users can use the credential.
+
+## Example Usage
+
+For AWS
+
+```hcl
+resource "databricks_service_credential" "external" {
+  name = aws_iam_role.external_data_access.name
+  aws_iam_role {
+    role_arn = aws_iam_role.external_data_access.arn
+  }
+  comment = "Managed by TF"
+}
+
+resource "databricks_grants" "external_creds" {
+  service_credential = databricks_service_credential.external.id
+  grant {
+    principal  = "Data Engineers"
+    privileges = ["CREATE_EXTERNAL_TABLE"]
+  }
+}
+```
+
+For Azure
+
+```hcl
+resource "databricks_service_credential" "external_mi" {
+  name = "mi_credential"
+  azure_managed_identity {
+    access_connector_id = azurerm_databricks_access_connector.example.id
+  }
+  comment = "Managed identity credential managed by TF"
+}
+
+resource "databricks_grants" "external_creds" {
+  service_credential = databricks_service_credential.external_mi.id
+  grant {
+    principal  = "Data Engineers"
+    privileges = ["CREATE_EXTERNAL_TABLE"]
+  }
+}
+```
+
+For GCP
+
+```hcl
+resource "databricks_service_credential" "external" {
+  name = "the-creds"
+  databricks_gcp_service_account {}
+}
+
+resource "databricks_grants" "external_creds" {
+  service_credential = databricks_service_credential.external.id
+  grant {
+    principal  = "Data Engineers"
+    privileges = ["CREATE_EXTERNAL_TABLE"]
+  }
+}
+```
+
+## Argument Reference
+
+The following arguments are required:
+
+- `name` - Name of Service Credentials, which must be unique within the [databricks_metastore](metastore.md). Change forces creation of a new resource.
+- `metastore_id` - (Required for account-level) Unique identifier of the parent Metastore. If set for workspace-level, it must match the ID of the metastore assigned to the workspace. When changing the metastore assigned to a workspace, this field becomes required.
+- `owner` - (Optional) Username/groupname/sp application_id of the service credential owner.
+- `read_only` - (Optional) Indicates whether the service credential is only usable for read operations.
+- `skip_validation` - (Optional) Suppress validation errors if any & force save the service credential.
+- `force_destroy` - (Optional) Delete service credential regardless of its dependencies.
+- `force_update` - (Optional) Update service credential regardless of its dependents.
+- `isolation_mode` - (Optional) Whether the service credential is accessible from all workspaces or a specific set of workspaces. Can be `ISOLATION_MODE_ISOLATED` or `ISOLATION_MODE_OPEN`. Setting the credential to `ISOLATION_MODE_ISOLATED` will automatically allow access from the current workspace.
+
+`aws_iam_role` optional configuration block for credential details for AWS:
+
+- `role_arn` - The Amazon Resource Name (ARN) of the AWS IAM role for S3 data access, of the form `arn:aws:iam::1234567890:role/MyRole-AJJHDSKSDF`
+
+`azure_managed_identity` optional configuration block for using managed identity as credential details for Azure (recommended over service principal):
+
+- `access_connector_id` - The Resource ID of the Azure Databricks Access Connector resource, of the form `/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-name/providers/Microsoft.Databricks/accessConnectors/connector-name`.
+
+- `managed_identity_id` - (Optional) The Resource ID of the Azure User Assigned Managed Identity associated with Azure Databricks Access Connector, of the form `/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-name/providers/Microsoft.ManagedIdentity/userAssignedIdentities/user-managed-identity-name`.
+
+`databricks_gcp_service_account` optional configuration block for creating a Databricks-managed GCP Service Account:
+
+- `email` (output only) - The email of the GCP service account created, to be granted access to relevant buckets.
+
+`cloudflare_api_token` optional configuration block for using a Cloudflare API Token as credential details. This requires account admin access:
+
+- `account_id` - R2 account ID
+- `access_key_id` - R2 API token access key ID
+- `secret_access_key` - R2 API token secret access key
+
+`azure_service_principal` optional configuration block to use service principal as credential details for Azure (Legacy):
+
+- `directory_id` - The directory ID corresponding to the Azure Active Directory (AAD) tenant of the application
+- `application_id` - The application ID of the application registration within the referenced AAD tenant
+- `client_secret` - The client secret generated for the above app ID in AAD. **This field is redacted on output**
+
+## Attribute Reference
+
+In addition to all arguments above, the following attributes are exported:
+
+- `id` - ID of this service credential - same as the `name`.
+- `service_credential_id` - Unique ID of service credential.
+
+## Import
+
+This resource can be imported by name:
+
+```bash
+terraform import databricks_service_credential.this <name>
+```
